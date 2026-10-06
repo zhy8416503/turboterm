@@ -11,6 +11,10 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
+      - name: 下载 Metal 工具链
+        run: |
+          xcodebuild -downloadComponent MetalToolchain || sudo -n xcodebuild -downloadComponent MetalToolchain
+
       - name: Xcode 构建 (不签名)
         run: |
           xcodebuild -project TurboTerm.xcodeproj \
