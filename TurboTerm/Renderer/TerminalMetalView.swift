@@ -91,7 +91,7 @@ inputLock.lock()
 let d = pendingInput
 pendingInput.removeAll(keepingCapacity: true)
 inputLock.unlock()
-if!d.isEmpty { parser.feed(d)}
+if !d.isEmpty { parser.feed(d)}
 }
 
 func send(_ string: String) {
@@ -306,10 +306,10 @@ let base = (r * cols + c) * 4
 let x0 = Float(c * cellW), y0 = Float(r * cellH)
 
 var fgC = cell.fg, bgC = cell.bg
-if cell.flags & CellFlags.reverse!= 0 { swap(&fgC, &bgC)}
+if cell.flags & CellFlags.reverse != 0 { swap(&fgC, &bgC)}
 let (fr, fgg, fb) = termRGB(fgC)
 let (br, bgg, bb) = termRGB(bgC)
-let ul: Float = (cell.flags & CellFlags.underline)!= 0? 2.0: 0.0
+let ul: Float = (cell.flags & CellFlags.underline) != 0 ? 2.0 : 0.0
 
 var u0: Float, vTop: Float, u1: Float, vBot: Float
 var qw = Float(cellW)
@@ -317,7 +317,7 @@ if cell.scalar == 0 {
 u0 = at.emptyUV.u; vTop = at.emptyUV.v
 u1 = at.emptyUV.u; vBot = at.emptyUV.v
 } else {
-let bold = (cell.flags & CellFlags.bold)!= 0
+let bold = (cell.flags & CellFlags.bold) != 0
 let e = at.entry(for: cell.scalar, bold: bold)
 let uv = at.uv(for: e)
 u0 = uv.u0; vTop = uv.v0; u1 = uv.u1; vBot = uv.v1
@@ -343,7 +343,7 @@ br: br, bg: bgg, bb: bb, ba: 1, flags: ul)
 
 private func kickPrep() {
 pendingLock.lock()
-guard!prepBusy, let frame = pendingFrame else {
+guard !prepBusy, let frame = pendingFrame else {
 pendingLock.unlock()
 return
 }
@@ -363,7 +363,7 @@ self?.prepFrame(frame, atlas: at)
 private func prepFrame(_ frame: DirtyFrame, atlas at: GlyphAtlas) {
 bufLock.lock()
 let wi = writeIndex
-let vb = wi < vertexBuffers.count? vertexBuffers[wi]: nil
+let vb = wi < vertexBuffers.count ? vertexBuffers[wi] : nil
 bufLock.unlock()
 guard let vb = vb else { finishPrep(); return}
 
@@ -391,7 +391,7 @@ finishPrep()
 private func finishPrep() {
 pendingLock.lock()
 prepBusy = false
-let more = pendingFrame!= nil
+let more = pendingFrame != nil
 pendingLock.unlock()
 if more { kickPrep()}
 }
@@ -410,7 +410,7 @@ let frame = controller.drainSync()
 cursorInfo = (frame.cursorX, frame.cursorY, frame.cursorVisible)
 
 // 脏行攒起来, 后台慢慢预处理; 跟不上就合并, 永不堆积
-if!frame.rows.isEmpty {
+if !frame.rows.isEmpty {
 pendingLock.lock()
 if var p = pendingFrame { p.merge(frame); pendingFrame = p}
 else { pendingFrame = frame}
