@@ -150,8 +150,14 @@ var cellH = 0
 
 // 三重缓冲: prep 写 writeIndex, main 读 readIndex, 永不打架
 var vertexBuffers: [MTLBuffer] = []
+/// 每个顶点缓冲对应的图集纹理 (顶点里的 UV 是按这个纹理烘焙的, 必须配对使用;
+/// applySettings 换图集时, 旧缓冲的旧纹理继续有效, 不会串)
+var bufferTextures: [MTLTexture?] = [nil, nil, nil]
 var readIndex = 0
 var writeIndex = 0
+/// 几何版本号: rebuildGeometry 递增; prep 发现版本号变了就丢弃本次结果,
+/// 防止"旧尺寸算出的顶点 + 新尺寸的缓冲"混用
+var geometryGen = 0
 let bufLock = NSLock()
 
 var cpuVerts: [CellVertex] = []
@@ -281,8 +287,10 @@ let b = device.makeBuffer(length: cellCount * 4 * stride, options:.storageModeSh
 b.label = "TermVerts\(i)"
 return b
 }
+bufferTextures = [nil, nil, nil]
 readIndex = 0
 writeIndex = 0
+geometryGen += 1
 bufLock.unlock()
 
 var idx = [UInt32]()
@@ -362,6 +370,7 @@ self?.prepFrame(frame, atlas: at)
 
 private func prepFrame(_ frame: DirtyFrame, atlas at: GlyphAtlas) {
 bufLock.lock()
+let gen = geometryGen
 let wi = writeIndex
 let vb = wi < vertexBuffers.count ? vertexBuffers[wi] : nil
 bufLock.unlock()
@@ -381,8 +390,12 @@ dst.advanced(by: rowStart).update(from: sbase.advanced(by: rowStart), count: col
 }
 
 bufLock.lock()
+// 几何版本变了 (中途 rebuildGeometry), 本次结果作废, 不更新 readIndex
+if gen == geometryGen && wi < vertexBuffers.count {
 readIndex = wi
 writeIndex = (writeIndex + 1) % vertexBuffers.count
+bufferTextures[wi] = at.texture
+}
 bufLock.unlock()
 finishPrep()
 }
@@ -420,6 +433,7 @@ kickPrep()
 // 渲染最新已完成的缓冲
 bufLock.lock()
 let ri = readIndex
+let tex = ri < bufferTextures.count ? bufferTextures[ri] : nil
 bufLock.unlock()
 let vb = vertexBuffers[ri]
 
@@ -430,7 +444,8 @@ enc.setRenderPipelineState(pipeline)
 enc.setVertexBuffer(vb, offset: 0, index: 0)
 var vp = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
 enc.setVertexBytes(&vp, length: MemoryLayout<SIMD2<Float>>.size, index: 1)
-enc.setFragmentTexture(atlasTexture(), index: 0)
+// 用和顶点缓冲配对的纹理 (prep 时存的); 还没预处理完时回退到当前图集
+enc.setFragmentTexture(tex ?? atlasTexture(), index: 0)
 enc.drawIndexedPrimitives(type:.triangle, indexCount: cols * rows * 6,
 indexType:.uint32, indexBuffer: ib, indexBufferOffset: 0)
 
@@ -470,8 +485,12 @@ return atlas.texture
 
 // MARK: - MTKView 封装
 
-final class MetalTermView: MTKView {
+final class MetalTermView: MTKView, UIKeyInput {
 let renderer: TermRenderer
+/// 直接键盘输入回调: 文字 -> 发给主窗口 (经 PaneManager 广播)
+var onTextInput: ((String) -> Void)?
+/// 退格键回调: 发 0x7F
+var onDelete: (() -> Void)?
 
 init(controller: TerminalController) {
 guard let device = MTLCreateSystemDefaultDevice() else {
@@ -496,6 +515,30 @@ required init(coder: NSCoder) {
 fatalError("init(coder:) 未实现")
 }
 
+// MARK: - 直接键盘输入 (终端即输入框, 点终端弹键盘)
+
+override var canBecomeFirstResponder: Bool { true }
+
+/// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
+override var keyboardType: UIKeyboardType {
+get { .asciiCapable }
+set { }
+}
+
+var hasText: Bool { true }
+
+func insertText(_ text: String) {
+onTextInput?(text)
+}
+
+func deleteBackward() {
+onDelete?()
+}
+
+@objc func focusKeyboard() {
+becomeFirstResponder()
+}
+
 override func layoutSubviews() {
 super.layoutSubviews()
 if renderer.lowPowerMode {
@@ -513,10 +556,23 @@ renderer.viewDidResize(to: self.drawableSize)
 
 struct TerminalMetalView: UIViewRepresentable {
 @ObservedObject var controller: TerminalController
+/// 直接输入: 文字发给主窗口 (调用方负责广播)
+var onTextInput: (String) -> Void = { _ in }
+/// 退格键
+var onDelete: () -> Void = { }
 
 func makeUIView(context: Context) -> MetalTermView {
-return MetalTermView(controller: controller)
+let v = MetalTermView(controller: controller)
+v.onTextInput = onTextInput
+v.onDelete = onDelete
+// 点终端即弹键盘, 终端本身就是输入框
+let tap = UITapGestureRecognizer(target: v, action: #selector(MetalTermView.focusKeyboard))
+v.addGestureRecognizer(tap)
+return v
 }
 
-func updateUIView(_ uiView: MetalTermView, context: Context) {}
+func updateUIView(_ uiView: MetalTermView, context: Context) {
+uiView.onTextInput = onTextInput
+uiView.onDelete = onDelete
+}
 }
