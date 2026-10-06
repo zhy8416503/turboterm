@@ -483,12 +483,14 @@ return atlas.texture
 
 // MARK: - MTKView 封装
 
-final class MetalTermView: MTKView, UIKeyInput {
+final class MetalTermView: MTKView, UIKeyInput, UITextInputTraits {
 let renderer: TermRenderer
 /// 直接键盘输入回调: 文字 -> 发给主窗口 (经 PaneManager 广播)
 var onTextInput: ((String) -> Void)?
 /// 退格键回调: 发 0x7F
 var onDelete: (() -> Void)?
+/// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
+var keyboardType: UIKeyboardType = .asciiCapable
 
 init(controller: TerminalController) {
 guard let device = MTLCreateSystemDefaultDevice() else {
@@ -507,8 +509,6 @@ self.isPaused = false
 self.enableSetNeedsDisplay = false
 self.preferredFramesPerSecond = controller.pendingSettings.fps
 self.clearColor = MTLClearColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1.0)
-// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
-self.keyboardType = .asciiCapable
 }
 
 required init(coder: NSCoder) {
