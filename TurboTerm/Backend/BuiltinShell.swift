@@ -7,9 +7,14 @@ final class BuiltinShell: TerminalBackend {
 
     private var onData: ((Data) -> Void)?
     private let workQ = DispatchQueue(label: "turboterm.shell", qos: .userInitiated)
+    /// 长时间任务专用队列: yes/bounce/matrix 等无限循环不能占死 workQ,
+    /// 否则 Ctrl-C 的 send 也在 workQ 排队, 永远停不掉任务。
+    private let jobQ = DispatchQueue(label: "turboterm.job", qos: .userInitiated)
     private let lock = NSLock()
 
     private var lineBuf: [UInt8] = []
+    /// 未完成的 UTF-8 序列 (多字节字符分字节到达时暂存, 凑成完整字符再回显)
+    private var utf8Pending: [UInt8] = []
     private var currentJob: UUID? = nil
     private var cancelledJobs = Set<UUID>()
 
@@ -51,6 +56,7 @@ final class BuiltinShell: TerminalBackend {
                 emit("^C\r\n" + prompt)
             }
             lineBuf.removeAll()
+            utf8Pending.removeAll()
             return
         }
         // 有任务在跑时, 普通输入直接忽略 (除了 Ctrl-C)
@@ -61,21 +67,53 @@ final class BuiltinShell: TerminalBackend {
 
         switch b {
         case 0x0D, 0x0A: // 回车 (整行输入时已逐字节回显, 这里只换行, 不重复回显)
+            // 未完成的 UTF-8 序列直接并入行缓冲 (非法字节按替换字符处理)
+            if !utf8Pending.isEmpty {
+                lineBuf.append(contentsOf: utf8Pending)
+                utf8Pending.removeAll()
+            }
             let line = String(bytes: lineBuf, encoding: .utf8) ?? ""
             lineBuf.removeAll()
             emit("\r\n")
             runCommand(line)
-        case 0x7F, 0x08: // 退格
+        case 0x7F, 0x08: // 退格 (删掉最后一个完整 UTF-8 字符, 可能 1~4 字节)
             if !lineBuf.isEmpty {
-                lineBuf.removeLast()
-                emit("\u{8} \u{8}")
+                var start = lineBuf.count - 1
+                while start > 0 && (lineBuf[start] & 0xC0) == 0x80 {
+                    start -= 1
+                }
+                let removed = Array(lineBuf[start...])
+                lineBuf.removeSubrange(start...)
+                // 宽字符占 2 格, 回显时多退一格
+                let w = removed.first.flatMap { b -> Int? in
+                    guard let s = String(bytes: removed, encoding: .utf8),
+                          let scalar = s.unicodeScalars.first else { return nil }
+                    return termCharWidth(scalar.value)
+                } ?? 1
+                var back = ""
+                for _ in 0..<w { back += "\u{8} \u{8}" }
+                emit(back)
             }
+            utf8Pending.removeAll()
         case 0x1B:
             break // 裸 ESC 忽略 (方向键等序列由命令自己处理, 这里简化)
         default:
-            if b >= 0x20 || b >= 0x80 {
-                lineBuf.append(b)
-                emit(String(bytes: [b], encoding: .utf8) ?? "")
+            if b >= 0x20 {
+                // 如果之前有未完成的序列, 但新字节不是续字节, 说明旧序列非法, 丢弃
+                if !utf8Pending.isEmpty && (b & 0xC0) != 0x80 {
+                    utf8Pending.removeAll(keepingCapacity: true)
+                }
+                utf8Pending.append(b)
+                // 凑成完整 UTF-8 字符再回显 (ASCII 单字节直接成, 多字节等续字节到齐)
+                if let s = String(bytes: utf8Pending, encoding: .utf8) {
+                    lineBuf.append(contentsOf: utf8Pending)
+                    utf8Pending.removeAll(keepingCapacity: true)
+                    emit(s)
+                } else if utf8Pending.count >= 4 {
+                    // 非法序列, 丢弃 (4 字节还解不出一定是坏数据)
+                    utf8Pending.removeAll(keepingCapacity: true)
+                }
+                // 否则是多字节字符的前缀, 等后续字节
             }
         }
     }
@@ -108,9 +146,11 @@ final class BuiltinShell: TerminalBackend {
     private func endJob(_ id: UUID, showPrompt: Bool = true) {
         lock.lock()
         if currentJob == id { currentJob = nil }
+        let wasCancelled = cancelledJobs.contains(id)
         cancelledJobs.remove(id)
         lock.unlock()
-        if showPrompt { emit("\r\n" + prompt) }
+        // 被 Ctrl-C 取消的任务不重复打 prompt (handleInputByte 里已经打过 "^C\r\n"+prompt)
+        if showPrompt && !wasCancelled { emit("\r\n" + prompt) }
     }
 
     private func cancelJob() {
@@ -131,8 +171,11 @@ final class BuiltinShell: TerminalBackend {
         case "clear": emit("\u{1B}[2J\u{1B}[H" + prompt)
         case "sleep":
             let n = Double(args.first ?? "1") ?? 1
-            Thread.sleep(forTimeInterval: min(max(n, 0), 30))
-            emit(prompt)
+            let id = beginJob()
+            jobQ.async { [weak self] in
+                Thread.sleep(forTimeInterval: min(max(n, 0), 30))
+                self?.endJob(id)
+            }
         case "yes": cmdYes(args)
         case "burst": cmdBurst(args)
         case "bounce": cmdBounce(args)
@@ -171,7 +214,7 @@ final class BuiltinShell: TerminalBackend {
     private func cmdYes(_ args: [String]) {
         let text = args.isEmpty ? "y" : args.joined(separator: " ")
         let id = beginJob()
-        workQ.async { [weak self] in
+        jobQ.async { [weak self] in
             guard let self = self else { return }
             var i = 0
             // 按块输出, 减少回调次数, 让解析器批量吃数据
@@ -195,7 +238,7 @@ final class BuiltinShell: TerminalBackend {
         let text = args.first ?? "TURBO◆霓虹"
         let hz = min(max(Double(args.dropFirst().first ?? "60") ?? 60, 1), 240)
         let id = beginJob()
-        workQ.async { [weak self] in
+        jobQ.async { [weak self] in
             guard let self = self else { return }
             let cols = 60, bandRows = 12, baseRow = 6
             let chars = Array(text)
@@ -246,7 +289,7 @@ final class BuiltinShell: TerminalBackend {
     private func cmdMatrix(_ args: [String]) {
         let hz = min(max(Double(args.first ?? "30") ?? 30, 1), 120)
         let id = beginJob()
-        workQ.async { [weak self] in
+        jobQ.async { [weak self] in
             guard let self = self else { return }
             let cols = 50, rows = 18
             let glyphs = Array("アイカ0123456789XYZ$#*+=:")
@@ -298,7 +341,7 @@ final class BuiltinShell: TerminalBackend {
     private func cmdBurst(_ args: [String]) {
         let n = min(max(Int(args.first ?? "10000") ?? 10000, 1), 200000)
         let id = beginJob()
-        workQ.async { [weak self] in
+        jobQ.async { [weak self] in
             guard let self = self else { return }
             var data = Data()
             data.reserveCapacity(n * 48)
@@ -318,7 +361,7 @@ final class BuiltinShell: TerminalBackend {
     private func cmdBench(_ args: [String]) {
         let n = min(max(Int(args.first ?? "20000") ?? 20000, 100), 500000)
         let id = beginJob()
-        workQ.async { [weak self] in
+        jobQ.async { [weak self] in
             guard let self = self else { return }
             self.emit("输出 \(n) 行……\r\n")
             let t0 = Date()
