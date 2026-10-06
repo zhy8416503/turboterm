@@ -460,22 +460,42 @@ final class TerminalBuffer {
         }
     }
 
-    // MARK: 尺寸变化 (旋转屏幕等): 当前屏送入回滚, 重建网格
+    // MARK: 尺寸变化 (旋转屏幕/键盘弹起等): 尽量保留可见内容, 不要清屏
 
     func resize(cols newCols: Int, rows newRows: Int) {
         guard newCols != cols || newRows != rows else { return }
+        let oldCells = cells
+        let oldCols = cols
+        let oldRows = rows
+        let oldCursorX = cursorX
+        let oldCursorY = cursorY
+        // 放不下的旧行送入回滚 (只送新网格装不下的顶部几行, 避免键盘每次弹起都重复送)
         if !usingAlt {
-            for r in 0..<rows {
-                let start = r * cols
-                pushScrollbackLine(Array(cells[start..<start + cols]))
+            let dropped = max(0, oldRows - newRows)
+            for r in 0..<dropped {
+                let start = r * oldCols
+                pushScrollbackLine(Array(oldCells[start..<start + oldCols]))
             }
         }
         cols = max(newCols, 1)
         rows = max(newRows, 1)
         cells = [TermCell](repeating: TermCell(scalar: 0, fg: defaultFG, bg: defaultBG), count: cols * rows)
+        // 把旧网格底部的内容复制到新网格底部 (保留最近的输出, 光标附近的内容不丢)
+        let copyRows = min(oldRows, rows)
+        let copyCols = min(oldCols, cols)
+        for r in 0..<copyRows {
+            let srcRow = oldRows - copyRows + r
+            let dstRow = rows - copyRows + r
+            for c in 0..<copyCols {
+                cells[dstRow * cols + c] = oldCells[srcRow * oldCols + c]
+            }
+        }
+        // 光标保持相对位置 (尽量不跳到左上角)
+        cursorX = min(oldCursorX, cols - 1)
+        cursorY = rows - copyRows + min(oldCursorY - (oldRows - copyRows), copyRows - 1)
+        cursorY = min(max(cursorY, 0), rows - 1)
         rowDirty = [Bool](repeating: false, count: rows)
         dirtyList.removeAll(keepingCapacity: true)
-        cursorX = 0; cursorY = 0
         scrollTop = 0; scrollBottom = rows - 1
         markAllDirty()
     }
