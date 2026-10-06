@@ -377,7 +377,6 @@ let n = min(cols, cells.count)
 for c in 0..<n { fillCell(row: r, col: c, cell: cells[c], atlas: at)}
 let rowStart = r * cols * 4
 dst.advanced(by: rowStart).update(from: sbase.advanced(by: rowStart), count: cols * 4)
-vb.didModifyRange(rowStart * stride..<(rowStart + cols * 4) * stride)
 }
 }
 
@@ -453,7 +452,6 @@ br: 1, bg: 1, bb: 1, ba: 1, flags: 0)
 }
 cv[0] = mk(x0, y0, 0, 0); cv[1] = mk(x1, y0, 1, 0)
 cv[2] = mk(x0, y1, 0, 1); cv[3] = mk(x1, y1, 1, 1)
-cb.didModifyRange(0..<4 * stride)
 enc.setVertexBuffer(cb, offset: 0, index: 0)
 enc.drawPrimitives(type:.triangleStrip, vertexStart: 0, vertexCount: 4)
 }
