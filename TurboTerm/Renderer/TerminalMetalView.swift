@@ -497,6 +497,12 @@ var onTextInput: ((String) -> Void)?
 var onDelete: (() -> Void)?
 /// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
 var keyboardType: UIKeyboardType = .asciiCapable
+/// 终端不需要 iOS 的"智能"输入行为, 全部关掉, 按键原样送达
+var autocorrectionType: UITextAutocorrectionType = .no
+var autocapitalizationType: UITextAutocapitalizationType = .none
+var spellCheckingType: UITextSpellCheckingType = .no
+var smartQuotesType: UITextSmartQuotesType = .no
+var smartDashesType: UITextSmartDashesType = .no
 
 init(controller: TerminalController) {
 guard let device = MTLCreateSystemDefaultDevice() else {
