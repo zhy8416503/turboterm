@@ -394,6 +394,12 @@ if gen == geometryGen && wi < vertexBuffers.count {
 readIndex = wi
 writeIndex = (writeIndex + 1) % vertexBuffers.count
 bufferTextures[wi] = at.texture
+} else {
+// 版本过期: 脏帧不能丢, 放回待处理队列下次重做 (否则启动 banner/命令输出永久空白)
+pendingLock.lock()
+if var p = pendingFrame { p.merge(frame); pendingFrame = p }
+else { pendingFrame = frame }
+pendingLock.unlock()
 }
 bufLock.unlock()
 finishPrep()
