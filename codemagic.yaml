@@ -9,6 +9,9 @@ workflows:
     environment:
       xcode: latest
     scripts:
+      - name: 下载 Metal 工具链
+        script: |
+          xcodebuild -downloadComponent MetalToolchain || sudo -n xcodebuild -downloadComponent MetalToolchain
       - name: Xcode 构建 (不签名)
         script: |
           xcodebuild -project TurboTerm.xcodeproj \
