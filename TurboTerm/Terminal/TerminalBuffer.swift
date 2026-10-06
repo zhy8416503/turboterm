@@ -469,31 +469,28 @@ final class TerminalBuffer {
         let oldRows = rows
         let oldCursorX = cursorX
         let oldCursorY = cursorY
-        // 放不下的旧行送入回滚 (只送新网格装不下的顶部几行, 避免键盘每次弹起都重复送)
+        // 放不下的旧行送入回滚 (只送新网格装不下的底部几行)
         if !usingAlt {
             let dropped = max(0, oldRows - newRows)
             for r in 0..<dropped {
-                let start = r * oldCols
+                let start = (oldRows - dropped + r) * oldCols
                 pushScrollbackLine(Array(oldCells[start..<start + oldCols]))
             }
         }
         cols = max(newCols, 1)
         rows = max(newRows, 1)
         cells = [TermCell](repeating: TermCell(scalar: 0, fg: defaultFG, bg: defaultBG), count: cols * rows)
-        // 把旧网格底部的内容复制到新网格底部 (保留最近的输出, 光标附近的内容不丢)
+        // 顶部对齐复制: 旧内容留在顶部, 新空行在底部 (终端常规行为)
         let copyRows = min(oldRows, rows)
         let copyCols = min(oldCols, cols)
         for r in 0..<copyRows {
-            let srcRow = oldRows - copyRows + r
-            let dstRow = rows - copyRows + r
             for c in 0..<copyCols {
-                cells[dstRow * cols + c] = oldCells[srcRow * oldCols + c]
+                cells[r * cols + c] = oldCells[r * oldCols + c]
             }
         }
-        // 光标保持相对位置 (尽量不跳到左上角)
+        // 光标保持原来的行列 (钳制到新范围内)
         cursorX = min(oldCursorX, cols - 1)
-        cursorY = rows - copyRows + min(oldCursorY - (oldRows - copyRows), copyRows - 1)
-        cursorY = min(max(cursorY, 0), rows - 1)
+        cursorY = min(oldCursorY, rows - 1)
         rowDirty = [Bool](repeating: false, count: rows)
         dirtyList.removeAll(keepingCapacity: true)
         scrollTop = 0; scrollBottom = rows - 1
