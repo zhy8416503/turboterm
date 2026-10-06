@@ -14,7 +14,7 @@ jobs:
       - name: Xcode 构建 (不签名)
         run: |
           xcodebuild -project TurboTerm.xcodeproj \
-            -target TurboTerm \
+            -scheme TurboTerm \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
