@@ -160,15 +160,17 @@ final class GlyphAtlas {
         return Entry(px: ex, py: ey, w: w, h: h)
     }
 
-    /// 字形 UV (注意 Metal 纹理 v=0 对应上传数据的第一行 = CG 位图的底行, 这里做翻转)
+    /// 字形 UV: 真机实测渲染管线会把字形旋转 180° 显示,
+    /// 这里把 UV 整体旋转 180° 抵消回来 (u0/u1 对调, vTop/vBot 对调)。
+    /// 顶点位置/索引/着色器均已核查无误, 问题只在采样方向。
     @inline(__always)
     func uv(for e: Entry) -> (u0: Float, v0: Float, u1: Float, v1: Float) {
         let s = Float(atlasSize)
-        let u0 = (Float(e.px) + 0.5) / s
-        let u1 = (Float(e.px + e.w) - 0.5) / s
-        // 位图行 0(底部) -> 纹理 v 小的一端; quad 顶部取位图顶部(行 h-1)
-        let vTop = (Float(e.py + e.h) - 0.5) / s   // quad 上沿
-        let vBot = (Float(e.py) + 0.5) / s         // quad 下沿
+        let u0 = (Float(e.px + e.w) - 0.5) / s
+        let u1 = (Float(e.px) + 0.5) / s
+        // quad 上沿取 v 小的一端, 下沿取 v 大的一端 (与之前相反)
+        let vTop = (Float(e.py) + 0.5) / s       // quad 上沿
+        let vBot = (Float(e.py + e.h) - 0.5) / s // quad 下沿
         return (u0, vTop, u1, vBot)
     }
 }
