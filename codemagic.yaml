@@ -1,0 +1,32 @@
+# Codemagic 云端构建配置: 原生 Xcode 项目 → 未签名 IPA
+# 用法: 把本仓库推到 GitHub 公开库, 在 Codemagic 里手动添加该仓库地址,
+# 选择这个 workflow (ios-unsigned) 点构建即可。
+
+workflows:
+  ios-unsigned:
+    name: iOS Unsigned IPA
+    max_build_duration: 60
+    environment:
+      xcode: latest
+    scripts:
+      - name: Xcode 构建 (不签名)
+        script: |
+          xcodebuild -project TurboTerm.xcodeproj \
+            -target TurboTerm \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+      - name: 打包 IPA
+        script: |
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "APP: $APP_PATH"
+          test -n "$APP_PATH" || (echo "找不到 .app" && exit 1)
+          rm -rf Payload TurboTerm-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qr TurboTerm-unsigned.ipa Payload
+    artifacts:
+      - TurboTerm-unsigned.ipa
