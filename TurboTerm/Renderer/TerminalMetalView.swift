@@ -376,7 +376,6 @@ let vb = wi < vertexBuffers.count ? vertexBuffers[wi] : nil
 bufLock.unlock()
 guard let vb = vb else { finishPrep(); return}
 
-let stride = MemoryLayout<CellVertex>.stride
 let dst = vb.contents().bindMemory(to: CellVertex.self, capacity: cols * rows * 4)
 cpuVerts.withUnsafeBufferPointer { src in
 guard let sbase = src.baseAddress else { return}
@@ -455,7 +454,6 @@ if cursorInfo.visible && blinkOn,
 let cb = cursorBuffer,
 cursorInfo.x >= 0 && cursorInfo.x < cols &&
 cursorInfo.y >= 0 && cursorInfo.y < rows {
-let stride = MemoryLayout<CellVertex>.stride
 let x0 = Float(cursorInfo.x * cellW), y0 = Float(cursorInfo.y * cellH)
 let x1 = x0 + Float(cellW), y1 = y0 + Float(cellH)
 let wu = cachedWhiteUV
@@ -509,6 +507,8 @@ self.isPaused = false
 self.enableSetNeedsDisplay = false
 self.preferredFramesPerSecond = controller.pendingSettings.fps
 self.clearColor = MTLClearColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1.0)
+// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
+self.keyboardType = .asciiCapable
 }
 
 required init(coder: NSCoder) {
@@ -518,12 +518,6 @@ fatalError("init(coder:) 未实现")
 // MARK: - 直接键盘输入 (终端即输入框, 点终端弹键盘)
 
 override var canBecomeFirstResponder: Bool { true }
-
-/// 终端用 ASCII 键盘: 命令都是 ASCII, 避免拼音输入法标记文本的复杂性
-override var keyboardType: UIKeyboardType {
-get { .asciiCapable }
-set { }
-}
 
 var hasText: Bool { true }
 
