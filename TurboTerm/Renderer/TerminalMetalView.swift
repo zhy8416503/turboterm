@@ -165,7 +165,7 @@ var prepBusy = false
 var pendingFrame: DirtyFrame?
 let pendingLock = NSLock()
 
-var lastDrawableSize: CGSize =.zero
+var lastDrawableSize: CGSize = .zero
 var cursorInfo = (x: 0, y: 0, visible: true)
 
 // 省电模式 (多开从窗口): 1fps + 强制 160p drawable, GPU 只画这点像素
@@ -187,7 +187,7 @@ let lib = device.makeDefaultLibrary()!
 let pd = MTLRenderPipelineDescriptor()
 pd.vertexFunction = lib.makeFunction(name: "term_vertex")
 pd.fragmentFunction = lib.makeFunction(name: "term_fragment")
-pd.colorAttachments[0].pixelFormat =.bgra8Unorm
+pd.colorAttachments[0].pixelFormat = .bgra8Unorm
 
 let vd = MTLVertexDescriptor()
 func attr(_ i: Int, _ fmt: MTLVertexFormat, _ off: Int) {
@@ -202,7 +202,7 @@ attr(3,.float4, 24) // fg
 attr(4,.float4, 40) // bg
 attr(5,.float, 56) // flags
 vd.layouts[0].stride = MemoryLayout<CellVertex>.stride
-vd.layouts[0].stepFunction =.perVertex
+vd.layouts[0].stepFunction = .perVertex
 pd.vertexDescriptor = vd
 
 self.pipeline = try! device.makeRenderPipelineState(descriptor: pd)
@@ -486,7 +486,7 @@ controller.renderer = renderer
 // 应用该窗格待定的设置 (字体/分辨率等); 从窗口直接进省电模式
 renderer.applySettings(controller.pendingSettings, lowPower: !controller.isMasterPane)
 self.delegate = renderer
-self.colorPixelFormat =.bgra8Unorm
+self.colorPixelFormat = .bgra8Unorm
 self.framebufferOnly = true
 self.isPaused = false
 self.enableSetNeedsDisplay = false
