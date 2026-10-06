@@ -60,10 +60,10 @@ final class BuiltinShell: TerminalBackend {
         if busy { return }
 
         switch b {
-        case 0x0D, 0x0A: // 回车
+        case 0x0D, 0x0A: // 回车 (整行输入时已逐字节回显, 这里只换行, 不重复回显)
             let line = String(bytes: lineBuf, encoding: .utf8) ?? ""
             lineBuf.removeAll()
-            emit(line + "\r\n")
+            emit("\r\n")
             runCommand(line)
         case 0x7F, 0x08: // 退格
             if !lineBuf.isEmpty {
