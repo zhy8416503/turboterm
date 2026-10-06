@@ -2,9 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var manager = PaneManager()
-    @State private var input = ""
     @State private var showSettings = false
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,7 +10,6 @@ struct ContentView: View {
             paneArea
             Divider()
             keyRow
-            inputRow
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(manager: manager)
@@ -53,12 +50,16 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 窗格区域
+    // MARK: - 窗格区域 (终端本身就是输入框: 点一下弹键盘直接打字)
 
     private var paneArea: some View {
         Group {
             if manager.panes.count == 1, let pane = manager.panes.first {
-                TerminalMetalView(controller: pane.controller)
+                TerminalMetalView(
+                    controller: pane.controller,
+                    onTextInput: { manager.sendToMaster($0) },
+                    onDelete: { manager.sendBytesToMaster([0x7F]) }
+                )
             } else {
                 ScrollView {
                     LazyVGrid(
@@ -71,7 +72,11 @@ struct ContentView: View {
                                 Text(pane.name + (pane.id == manager.master?.id ? " · 主输入" : " · 1fps/160p"))
                                     .font(.system(size: 11, design: .monospaced))
                                     .foregroundColor(.secondary)
-                                TerminalMetalView(controller: pane.controller)
+                                TerminalMetalView(
+                                    controller: pane.controller,
+                                    onTextInput: { manager.sendToMaster($0) },
+                                    onDelete: { manager.sendBytesToMaster([0x7F]) }
+                                )
                                     .frame(height: 250)
                                     .cornerRadius(6)
                                     .overlay(
@@ -120,32 +125,6 @@ struct ContentView: View {
     private func adjustFont(_ d: CGFloat) {
         manager.settings.fontSize = min(max(manager.settings.fontSize + d, 10), 24)
         manager.applySettingsToAll()
-    }
-
-    // MARK: - 输入行 (永远发给主窗口, 广播开时重复到所有窗口)
-
-    private var inputRow: some View {
-        HStack(spacing: 8) {
-            TextField("输入命令…(主窗口, 广播\(manager.broadcast ? "开" : "关"))",
-                      text: $input)
-                .textFieldStyle(.roundedBorder)
-                .autocapitalization(.none)
-                .autocorrectionDisabled()
-                .focused($inputFocused)
-                .onSubmit { sendInput() }
-            Button("发送") { sendInput() }
-                .buttonStyle(.borderedProminent)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(UIColor.systemBackground))
-    }
-
-    private func sendInput() {
-        let cmd = input
-        input = ""
-        manager.sendToMaster(cmd + "\n")
-        inputFocused = true
     }
 }
 
