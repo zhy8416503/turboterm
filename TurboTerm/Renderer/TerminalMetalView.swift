@@ -213,7 +213,8 @@ pd.vertexDescriptor = vd
 
 self.pipeline = try! device.makeRenderPipelineState(descriptor: pd)
 super.init()
-prewarmAtlas()
+// 首帧不阻塞预热: 字形按需烘焙, 避免启动 1-3 秒黑屏
+// prewarmAtlas()
 }
 
 // MARK: 设置 (主线程调用)
@@ -241,7 +242,8 @@ cellW = atlas.cellW
 cellH = atlas.cellH
 cachedWhiteUV = atlas.whiteUV
 atlasLock.unlock()
-prewarmAtlas()
+// 首帧不阻塞预热 (见 init 注释)
+// prewarmAtlas()
 mtkView?.preferredFramesPerSecond = fps
 viewDidResize(to: lastDrawableSize)
 }
