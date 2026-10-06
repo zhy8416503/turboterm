@@ -71,10 +71,10 @@ final class VTParser {
                 u8val = (u8val << 6) | UInt32(b & 0x3F)
                 u8need -= 1
                 if u8need == 0 { buf.put(u8val) }
-            } else {
-                u8need = 0  // 非法序列, 丢弃
+                return
             }
-            return
+            // 非法序列: 丢弃已收的字节, 当前字节按新字符重新处理 (不直接 return)
+            u8need = 0
         }
         if b >= 0x80 {
             if b & 0xE0 == 0xC0 { u8val = UInt32(b & 0x1F); u8need = 1 }
