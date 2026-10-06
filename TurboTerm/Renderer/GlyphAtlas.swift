@@ -21,6 +21,8 @@ final class GlyphAtlas {
     let cellH: Int
     let font: CTFont
     let boldFont: CTFont
+    /// CJK 回退字体 (Menlo 没有中文字形, 中文用系统字体)
+    let cjkFont: CTFont
 
     private var entries: [UInt64: Entry] = [:]
     private var packX = 1
@@ -51,6 +53,9 @@ final class GlyphAtlas {
         } else {
             self.boldFont = f
         }
+        // CJK 回退: 苹方 (Menlo 无中文字形)
+        let cjkUI = UIFont.systemFont(ofSize: pxSize)
+        self.cjkFont = CTFontCreateWithName(cjkUI.fontName as CFString, pxSize, nil)
 
         CTFontGetGlyphsForCharacters(f, &ch, &g, 1)
         var adv = CGSize.zero
@@ -130,7 +135,7 @@ final class GlyphAtlas {
         ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
         ctx.setFillColor(gray: 1, alpha: 1)
 
-        let f = bold ? boldFont : font
+        var f = bold ? boldFont : font
         // scalar -> UTF-16
         var units: [UniChar] = []
         if scalar < 0x10000 {
@@ -140,7 +145,12 @@ final class GlyphAtlas {
             units = [UniChar(0xD800 + (v >> 10)), UniChar(0xDC00 + (v & 0x3FF))]
         }
         var glyphs = [CGGlyph](repeating: 0, count: units.count)
-        let got = CTFontGetGlyphsForCharacters(f, units, &glyphs, units.count)
+        var got = CTFontGetGlyphsForCharacters(f, units, &glyphs, units.count)
+        // 主字体缺字时 (如 Menlo 无中文), 用 CJK 回退字体再试一次
+        if (!got || glyphs[0] == 0) && scalar >= 0x1100 {
+            f = cjkFont
+            got = CTFontGetGlyphsForCharacters(f, units, &glyphs, units.count)
+        }
 
         if got && glyphs[0] != 0 {
             var pos = CGPoint(x: 0, y: CTFontGetDescent(f))
