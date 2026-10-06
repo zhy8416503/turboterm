@@ -112,6 +112,14 @@ struct ContentView: View {
                 KeyButton("↓") { manager.sendBytesToMaster([0x1B, 0x5B, 0x42]) }
                 KeyButton("←") { manager.sendBytesToMaster([0x1B, 0x5B, 0x44]) }
                 KeyButton("→") { manager.sendBytesToMaster([0x1B, 0x5B, 0x43]) }
+                KeyButton("粘贴") {
+                    if let s = UIPasteboard.general.string, !s.isEmpty {
+                        // 统一换行符, 避免 \r\n 触发两次回车
+                        let t = s.replacingOccurrences(of: "\r\n", with: "\n")
+                                     .replacingOccurrences(of: "\r", with: "\n")
+                        manager.sendToMaster(t)
+                    }
+                }
                 KeyButton("广播\(manager.broadcast ? "开" : "关")") {
                     manager.broadcast.toggle()
                 }
